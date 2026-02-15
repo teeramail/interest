@@ -310,15 +310,57 @@ function StudyCard({
   const [notes, setNotes] = useState(card.notes ?? "");
   const [isCompleted, setIsCompleted] = useState(card.isCompleted);
   const [rating, setRating] = useState(card.rating ?? 0);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageSubfolder, setImageSubfolder] = useState("study-cards/images");
+  const [editedImage, setEditedImage] = useState<{ imageUrl: string; s3Key: string } | null>(
+    card.imageUrl && card.imageS3Key
+      ? {
+          imageUrl: card.imageUrl,
+          s3Key: card.imageS3Key,
+        }
+      : null,
+  );
 
   // Parse attachments
   const attachments: Attachment[] = card.attachments ? JSON.parse(card.attachments) : [];
+
+  const uploadEditedImage = async (file: File) => {
+    setImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("subfolder", imageSubfolder);
+
+      const res = await fetch("/api/upload-card-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      const data = (await res.json()) as { s3Key: string; imageUrl: string };
+      setEditedImage({ imageUrl: data.imageUrl, s3Key: data.s3Key });
+    } catch {
+      alert("Image upload failed");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadEditedImage(file);
+    e.target.value = "";
+  };
 
   const handleSave = () => {
     onSave({
       title,
       description,
       youtubeUrl: youtubeUrl || undefined,
+      imageUrl: editedImage?.imageUrl,
+      imageS3Key: editedImage?.s3Key,
       category: category || undefined,
       difficulty,
       tags: tags || undefined,
@@ -352,6 +394,54 @@ function StudyCard({
             rows={3}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Card Image</label>
+            <div className="mb-2 flex items-center gap-2">
+              <Folder className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={imageSubfolder}
+                onChange={(e) => setImageSubfolder(e.target.value)}
+                placeholder="Folder path (e.g., study-cards/images)"
+                className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
+              />
+            </div>
+            {editedImage && (
+              <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={editedImage.imageUrl}
+                  alt="Card image preview"
+                  className="h-full w-full object-cover"
+                />
+                {imageUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  </div>
+                )}
+              </div>
+            )}
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-3 text-sm text-gray-500 transition-colors hover:border-violet-400 hover:bg-violet-50/50">
+              {imageUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading image...
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="h-4 w-4" />
+                  {editedImage ? "Replace image" : "Upload image"}
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleEditImageUpload}
+                disabled={imageUploading}
+              />
+            </label>
+          </div>
           <input
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -423,6 +513,7 @@ function StudyCard({
             </button>
             <button
               onClick={handleSave}
+              disabled={imageUploading}
               className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
               <Save className="h-4 w-4" />

@@ -122,6 +122,20 @@ export const studyCardsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
+
+      if (updates.imageS3Key) {
+        const existingCard = await ctx.db
+          .select({ imageS3Key: studyCards.imageS3Key })
+          .from(studyCards)
+          .where(eq(studyCards.id, id))
+          .limit(1);
+
+        const previousImageKey = existingCard[0]?.imageS3Key;
+        if (previousImageKey && previousImageKey !== updates.imageS3Key) {
+          await deleteS3Object(previousImageKey);
+        }
+      }
+
       const result = await ctx.db
         .update(studyCards)
         .set(updates)
