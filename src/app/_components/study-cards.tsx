@@ -29,22 +29,85 @@ import { api } from "~/trpc/react";
 import { format } from "date-fns";
 
 const SUBJECT_TAG_SUGGESTIONS = [
-  "mechanics",
-  "algebra",
+  "physics",
+  "classical mechanics",
+  "kinematics",
+  "dynamics",
+  "electricity",
+  "electromagnetism",
+  "electrostatics",
+  "circuits",
+  "optics",
+  "thermodynamics",
+  "waves",
+  "sound",
+  "fluid mechanics",
   "quantum physics",
+  "atomic physics",
+  "nuclear physics",
+  "relativity",
+  "astrophysics",
+  "algebra",
+  "linear algebra",
   "geometry",
+  "trigonometry",
   "calculus",
+  "statistics",
+  "probability",
+  "number theory",
+  "discrete math",
+  "arithmetic",
   "chemistry",
+  "organic chemistry",
+  "inorganic chemistry",
+  "physical chemistry",
+  "analytical chemistry",
+  "biochemistry",
   "biology",
+  "botany",
+  "zoology",
+  "genetics",
+  "microbiology",
+  "ecology",
+  "human anatomy",
+  "physiology",
+  "neuroscience",
+  "marine biology",
+  "oceanography",
+  "earth science",
+  "geology",
+  "meteorology",
   "astronomy",
+  "space science",
   "coding",
+  "computer science",
+  "programming",
+  "algorithms",
+  "data structures",
+  "web development",
+  "cybersecurity",
+  "ai",
+  "machine learning",
+  "data science",
+  "robotics",
   "history",
+  "world history",
   "geography",
+  "economics",
+  "civics",
   "english",
+  "reading",
+  "writing",
   "vocabulary",
   "grammar",
+  "literature",
+  "public speaking",
   "music",
   "art",
+  "drawing",
+  "design",
+  "critical thinking",
+  "problem solving",
 ];
 
 export function StudyCards() {
@@ -798,7 +861,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
     (tag) =>
       tag.toLowerCase().includes(currentTagToken.toLowerCase()) &&
       !selectedTags.includes(tag.toLowerCase()),
-  ).slice(0, 8);
+  ).slice(0, 20);
 
   const applyTagSuggestion = (tag: string) => {
     const committedTags = tags
@@ -1159,7 +1222,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
                 onBlur={() => {
                   setTimeout(() => setShowTagSuggestions(false), 120);
                 }}
-                placeholder="tag1, tag2, tag3"
+                placeholder="algebra, electricity, botany, oceanography"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               />
 
@@ -1179,7 +1242,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
               )}
             </div>
             <p className="mt-1 text-xs text-gray-400">
-              Suggestions appear as you type. You can still type any custom tags.
+              Suggestions appear as you type. Add as many tags as you want (comma-separated), including custom tags.
             </p>
           </div>
 
