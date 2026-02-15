@@ -28,6 +28,25 @@ import {
 import { api } from "~/trpc/react";
 import { format } from "date-fns";
 
+const SUBJECT_TAG_SUGGESTIONS = [
+  "mechanics",
+  "algebra",
+  "quantum physics",
+  "geometry",
+  "calculus",
+  "chemistry",
+  "biology",
+  "astronomy",
+  "coding",
+  "history",
+  "geography",
+  "english",
+  "vocabulary",
+  "grammar",
+  "music",
+  "art",
+];
+
 export function StudyCards() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
@@ -153,11 +172,13 @@ export function StudyCards() {
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
         >
           <option value="">All Categories</option>
-          {categories?.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
+          {categories
+            ?.filter((cat): cat is string => Boolean(cat))
+            .map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
         </select>
         <select
           value={selectedDifficulty}
@@ -664,6 +685,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const [category, setCategory] = useState("");
   const [difficulty, setDifficulty] = useState("medium");
   const [tags, setTags] = useState("");
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [notes, setNotes] = useState("");
   const [subfolder, setSubfolder] = useState("study-cards/images");
 
@@ -675,6 +697,28 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [attachmentSubfolder, setAttachmentSubfolder] = useState("study-cards/attachments");
+
+  const currentTagToken = tags.split(",").at(-1)?.trimStart() ?? "";
+  const selectedTags = tags
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  const suggestedTags = SUBJECT_TAG_SUGGESTIONS.filter(
+    (tag) =>
+      tag.toLowerCase().includes(currentTagToken.toLowerCase()) &&
+      !selectedTags.includes(tag.toLowerCase()),
+  ).slice(0, 8);
+
+  const applyTagSuggestion = (tag: string) => {
+    const committedTags = tags
+      .split(",")
+      .slice(0, -1)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const nextTags = [...committedTags, tag];
+    setTags(`${nextTags.join(", ")}, `);
+    setShowTagSuggestions(false);
+  };
 
   // Handle clipboard paste
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
@@ -1013,12 +1057,39 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tags
             </label>
-            <input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="tag1, tag2, tag3"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-            />
+            <div className="relative">
+              <input
+                value={tags}
+                onChange={(e) => {
+                  setTags(e.target.value);
+                  setShowTagSuggestions(true);
+                }}
+                onFocus={() => setShowTagSuggestions(true)}
+                onBlur={() => {
+                  setTimeout(() => setShowTagSuggestions(false), 120);
+                }}
+                placeholder="tag1, tag2, tag3"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+
+              {showTagSuggestions && suggestedTags.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-44 w-full overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+                  {suggestedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => applyTagSuggestion(tag)}
+                      className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-violet-50"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              Suggestions appear as you type. You can still type any custom tags.
+            </p>
           </div>
 
           <div>
