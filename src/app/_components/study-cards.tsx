@@ -370,22 +370,63 @@ function StudyCard({
   const [category, setCategory] = useState(card.category ?? "");
   const [difficulty, setDifficulty] = useState(card.difficulty ?? "medium");
   const [tags, setTags] = useState(card.tags ?? "");
+  const [showEditTagSuggestions, setShowEditTagSuggestions] = useState(false);
   const [notes, setNotes] = useState(card.notes ?? "");
   const [isCompleted, setIsCompleted] = useState(card.isCompleted);
   const [rating, setRating] = useState(card.rating ?? 0);
   const [imageUploading, setImageUploading] = useState(false);
   const [imageSubfolder, setImageSubfolder] = useState("study-cards/images");
-  const [editedImage, setEditedImage] = useState<{ imageUrl: string; s3Key: string } | null>(
-    card.imageUrl && card.imageS3Key
-      ? {
-          imageUrl: card.imageUrl,
-          s3Key: card.imageS3Key,
-        }
-      : null,
-  );
+  const [isEditImageDragOver, setIsEditImageDragOver] = useState(false);
 
   // Parse attachments
-  const attachments: Attachment[] = card.attachments ? JSON.parse(card.attachments) : [];
+  const parsedAttachments: Attachment[] = card.attachments ? JSON.parse(card.attachments) : [];
+  const persistedCardImages: CardImageMeta[] = parsedAttachments
+    .filter((att) => att.kind === "card-image")
+    .map((att) => ({
+      s3Key: att.s3Key,
+      imageUrl: att.url,
+      subfolder: att.subfolder,
+      originalName: att.originalName,
+      fileSize: att.fileSize,
+    }));
+  const nonCardImageAttachments = parsedAttachments.filter((att) => att.kind !== "card-image");
+  const visibleAttachments = nonCardImageAttachments;
+
+  const [editedImages, setEditedImages] = useState<CardImageMeta[]>(() => {
+    const images: CardImageMeta[] = [...persistedCardImages];
+    if (card.imageUrl && card.imageS3Key && !images.some((img) => img.s3Key === card.imageS3Key)) {
+      images.unshift({
+        s3Key: card.imageS3Key,
+        imageUrl: card.imageUrl,
+        subfolder: "study-cards/images",
+        originalName: "Card image",
+        fileSize: 0,
+      });
+    }
+    return images.slice(0, MAX_CARD_IMAGES);
+  });
+
+  const currentEditTagToken = tags.split(",").at(-1)?.trimStart() ?? "";
+  const selectedEditTags = tags
+    .split(",")
+    .map((t: string) => t.trim().toLowerCase())
+    .filter(Boolean);
+  const suggestedEditTags = SUBJECT_TAG_SUGGESTIONS.filter(
+    (tag) =>
+      tag.toLowerCase().includes(currentEditTagToken.toLowerCase()) &&
+      !selectedEditTags.includes(tag.toLowerCase()),
+  ).slice(0, 20);
+
+  const applyEditTagSuggestion = (tag: string) => {
+    const committedTags = tags
+      .split(",")
+      .slice(0, -1)
+      .map((t: string) => t.trim())
+      .filter(Boolean);
+    const nextTags = [...committedTags, tag];
+    setTags(`${nextTags.join(", ")}, `);
+    setShowEditTagSuggestions(false);
+  };
 
   const uploadEditedImage = async (file: File) => {
     setImageUploading(true);
@@ -401,29 +442,86 @@ function StudyCard({
 
       if (!res.ok) throw new Error("Upload failed");
 
-      const data = (await res.json()) as { s3Key: string; imageUrl: string };
-      setEditedImage({ imageUrl: data.imageUrl, s3Key: data.s3Key });
+      const data = (await res.json()) as {
+        s3Key: string;
+        imageUrl: string;
+        subfolder: string;
+        compressedSize: number;
+      };
+      return {
+        s3Key: data.s3Key,
+        imageUrl: data.imageUrl,
+        subfolder: data.subfolder,
+        originalName: file.name,
+        fileSize: data.compressedSize,
+      } satisfies CardImageMeta;
     } catch {
       alert("Image upload failed");
+      return null;
     } finally {
       setImageUploading(false);
     }
   };
 
+  const uploadManyEditedImages = async (files: File[]) => {
+    const remaining = MAX_CARD_IMAGES - editedImages.length;
+    if (remaining <= 0) {
+      alert(`You can upload up to ${MAX_CARD_IMAGES} images per card.`);
+      return;
+    }
+
+    for (const file of files.slice(0, remaining)) {
+      const uploaded = await uploadEditedImage(file);
+      if (uploaded) {
+        setEditedImages((prev) => [...prev, uploaded]);
+      }
+    }
+  };
+
   const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await uploadEditedImage(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadManyEditedImages(Array.from(files));
     e.target.value = "";
   };
 
+  const removeEditedImage = (s3Key: string) => {
+    setEditedImages((prev) => prev.filter((img) => img.s3Key !== s3Key));
+  };
+
+  const handleEditImageDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsEditImageDragOver(false);
+    const droppedFiles = Array.from(e.dataTransfer.files).filter((f) =>
+      f.type.startsWith("image/"),
+    );
+    if (droppedFiles.length > 0) {
+      await uploadManyEditedImages(droppedFiles);
+    }
+  };
+
   const handleSave = () => {
+    const cardImageAttachments: Attachment[] = editedImages.map((img, index) => ({
+      fileName: `card-image-${index + 1}.webp`,
+      originalName: img.originalName,
+      mimeType: "image/webp",
+      fileSize: img.fileSize,
+      s3Key: img.s3Key,
+      url: img.imageUrl,
+      subfolder: img.subfolder,
+      kind: "card-image",
+    }));
+
     onSave({
       title,
       description,
       youtubeUrl: youtubeUrl || undefined,
-      imageUrl: editedImage?.imageUrl,
-      imageS3Key: editedImage?.s3Key,
+      imageUrl: editedImages[0]?.imageUrl,
+      imageS3Key: editedImages[0]?.s3Key,
+      attachments:
+        [...nonCardImageAttachments, ...cardImageAttachments].length > 0
+          ? JSON.stringify([...nonCardImageAttachments, ...cardImageAttachments])
+          : undefined,
       category: category || undefined,
       difficulty,
       tags: tags || undefined,
@@ -465,8 +563,19 @@ function StudyCard({
 
   if (isEditing) {
     return (
-      <div className="rounded-xl bg-white p-6 shadow-sm ring-2 ring-violet-500">
-        <div className="space-y-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="max-h-[92vh] w-full max-w-3xl overflow-auto rounded-xl bg-white p-6 shadow-xl ring-2 ring-violet-500">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Edit Study Card</h3>
+            <button
+              onClick={onCancel}
+              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -492,22 +601,36 @@ function StudyCard({
                 className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
               />
             </div>
-            {editedImage && (
-              <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={editedImage.imageUrl}
-                  alt="Card image preview"
-                  className="h-full w-full object-cover"
-                />
-                {imageUploading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+            {editedImages.length > 0 && (
+              <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {editedImages.map((img) => (
+                  <div key={img.s3Key} className="relative overflow-hidden rounded-lg border border-gray-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.imageUrl} alt={img.originalName} className="aspect-video w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeEditedImage(img.s3Key)}
+                      className="absolute right-1 top-1 rounded-full bg-white/90 p-1 shadow hover:bg-white"
+                    >
+                      <X className="h-3 w-3 text-gray-700" />
+                    </button>
                   </div>
-                )}
+                ))}
               </div>
             )}
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-3 text-sm text-gray-500 transition-colors hover:border-violet-400 hover:bg-violet-50/50">
+            <label
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsEditImageDragOver(true);
+              }}
+              onDragLeave={() => setIsEditImageDragOver(false)}
+              onDrop={handleEditImageDrop}
+              className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed p-3 text-sm transition-colors ${
+                isEditImageDragOver
+                  ? "border-violet-500 bg-violet-50 text-violet-700"
+                  : "border-gray-300 text-gray-500 hover:border-violet-400 hover:bg-violet-50/50"
+              }`}
+            >
               {imageUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -516,15 +639,16 @@ function StudyCard({
               ) : (
                 <>
                   <ImageIcon className="h-4 w-4" />
-                  {editedImage ? "Replace image" : "Upload image"}
+                  Drag & drop or upload images ({editedImages.length}/{MAX_CARD_IMAGES})
                 </>
               )}
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={handleEditImageUpload}
-                disabled={imageUploading}
+                disabled={imageUploading || editedImages.length >= MAX_CARD_IMAGES}
               />
             </label>
           </div>
@@ -551,12 +675,45 @@ function StudyCard({
               <option value="hard">Hard</option>
             </select>
           </div>
-          <input
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="Tags (comma separated)..."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Tags</label>
+            <div className="relative">
+              <input
+                value={tags}
+                onChange={(e) => {
+                  setTags(e.target.value);
+                  setShowEditTagSuggestions(true);
+                }}
+                onFocus={() => setShowEditTagSuggestions(true)}
+                onBlur={() => {
+                  setTimeout(() => setShowEditTagSuggestions(false), 120);
+                }}
+                placeholder="algebra, electricity, botany, oceanography"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+
+              {showEditTagSuggestions && suggestedEditTags.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-44 w-full overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+                  {suggestedEditTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyEditTagSuggestion(tag);
+                      }}
+                      className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-violet-50"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              Add many tags with comma separation. You can pick suggestions or type your own.
+            </p>
+          </div>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -600,13 +757,14 @@ function StudyCard({
             <button
               onClick={handleSave}
               disabled={imageUploading}
-              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
               Save
             </button>
           </div>
         </div>
+      </div>
       </div>
     );
   }
@@ -786,11 +944,11 @@ function StudyCard({
         )}
 
         {/* Attachments */}
-        {attachments.length > 0 && (
+        {visibleAttachments.length > 0 && (
           <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-2">
             <p className="mb-1 text-xs font-medium text-gray-500">Attachments:</p>
             <div className="space-y-1">
-              {attachments.map((att: Attachment) => {
+              {visibleAttachments.map((att: Attachment) => {
                 const Icon = getAttachmentIcon(att.mimeType);
                 return (
                   <a
@@ -835,7 +993,18 @@ interface Attachment {
   s3Key: string;
   url: string;
   subfolder?: string;
+  kind?: "card-image" | "attachment";
 }
+
+interface CardImageMeta {
+  s3Key: string;
+  imageUrl: string;
+  subfolder?: string;
+  originalName: string;
+  fileSize: number;
+}
+
+const MAX_CARD_IMAGES = 10;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -866,9 +1035,9 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const [notes, setNotes] = useState("");
   const [subfolder, setSubfolder] = useState("study-cards/images");
 
-  const [cardImage, setCardImage] = useState<{ s3Key: string; imageUrl: string; subfolder: string } | null>(null);
+  const [cardImages, setCardImages] = useState<CardImageMeta[]>([]);
   const [imageUploading, setImageUploading] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isCreateImageDragOver, setIsCreateImageDragOver] = useState(false);
   const [pasteMode, setPasteMode] = useState(false);
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -908,7 +1077,12 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
       if (item.type.startsWith("image/")) {
         const file = item.getAsFile();
         if (file) {
-          await uploadImageFile(file);
+          const uploaded = await uploadImageFile(file);
+          if (uploaded) {
+            setCardImages((prev) =>
+              prev.length >= MAX_CARD_IMAGES ? prev : [...prev, uploaded],
+            );
+          }
         }
       }
     }
@@ -923,7 +1097,6 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   }, [handlePaste, pasteMode]);
 
   const uploadImageFile = async (file: File) => {
-    setImagePreview(URL.createObjectURL(file));
     setImageUploading(true);
 
     try {
@@ -938,20 +1111,62 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
 
       if (!res.ok) throw new Error("Upload failed");
 
-      const data = (await res.json()) as { s3Key: string; imageUrl: string; subfolder: string; originalSize: number; compressedSize: number };
-      setCardImage({ s3Key: data.s3Key, imageUrl: data.imageUrl, subfolder: data.subfolder });
+      const data = (await res.json()) as {
+        s3Key: string;
+        imageUrl: string;
+        subfolder: string;
+        compressedSize: number;
+      };
+      return {
+        s3Key: data.s3Key,
+        imageUrl: data.imageUrl,
+        subfolder: data.subfolder,
+        originalName: file.name,
+        fileSize: data.compressedSize,
+      } satisfies CardImageMeta;
     } catch {
-      setImagePreview(null);
       alert("Image upload failed");
+      return null;
     } finally {
       setImageUploading(false);
     }
   };
 
+  const uploadManyCardImages = async (files: File[]) => {
+    const remaining = MAX_CARD_IMAGES - cardImages.length;
+    if (remaining <= 0) {
+      alert(`You can upload up to ${MAX_CARD_IMAGES} images per card.`);
+      return;
+    }
+
+    for (const file of files.slice(0, remaining)) {
+      const uploaded = await uploadImageFile(file);
+      if (uploaded) {
+        setCardImages((prev) => [...prev, uploaded]);
+      }
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await uploadImageFile(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadManyCardImages(Array.from(files));
+    e.target.value = "";
+  };
+
+  const removeCardImage = (s3Key: string) => {
+    setCardImages((prev) => prev.filter((img) => img.s3Key !== s3Key));
+  };
+
+  const handleCreateImageDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsCreateImageDragOver(false);
+    const droppedFiles = Array.from(e.dataTransfer.files).filter((f) =>
+      f.type.startsWith("image/"),
+    );
+    if (droppedFiles.length > 0) {
+      await uploadManyCardImages(droppedFiles);
+    }
   };
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -991,13 +1206,26 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) return;
+
+    const cardImageAttachments: Attachment[] = cardImages.map((img, index) => ({
+      fileName: `card-image-${index + 1}.webp`,
+      originalName: img.originalName,
+      mimeType: "image/webp",
+      fileSize: img.fileSize,
+      s3Key: img.s3Key,
+      url: img.imageUrl,
+      subfolder: img.subfolder,
+      kind: "card-image",
+    }));
+    const combinedAttachments = [...attachments, ...cardImageAttachments];
+
     onSubmit({
       title: title.trim(),
       description: description.trim(),
       youtubeUrl: youtubeUrl.trim() || undefined,
-      imageUrl: cardImage?.imageUrl,
-      imageS3Key: cardImage?.s3Key,
-      attachments: attachments.length > 0 ? JSON.stringify(attachments) : undefined,
+      imageUrl: cardImages[0]?.imageUrl,
+      imageS3Key: cardImages[0]?.s3Key,
+      attachments: combinedAttachments.length > 0 ? JSON.stringify(combinedAttachments) : undefined,
       category: category.trim() || undefined,
       difficulty,
       tags: tags.trim() || undefined,
@@ -1065,58 +1293,71 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
               />
             </div>
 
-            {imagePreview ?? cardImage ? (
-              <div className="relative w-full overflow-hidden rounded-lg border border-gray-200">
-                <div className="relative aspect-video bg-gray-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={cardImage?.imageUrl ?? imagePreview ?? ""}
-                    alt="Card preview"
-                    className="h-full w-full object-cover"
-                  />
-                  {imageUploading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCardImage(null);
-                    setImagePreview(null);
-                  }}
-                  className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 shadow hover:bg-white"
-                >
-                  <X className="h-4 w-4 text-gray-600" />
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 text-sm text-gray-500 transition-colors hover:border-violet-400 hover:bg-violet-50/50">
-                  <ImageIcon className="h-5 w-5" />
-                  Click to upload card image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setPasteMode(true)}
-                  className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed p-4 text-sm transition-colors ${
-                    pasteMode 
-                      ? "border-violet-500 bg-violet-50 text-violet-700" 
-                      : "border-gray-300 text-gray-500 hover:border-violet-400 hover:bg-violet-50/50"
-                  }`}
-                >
-                  <ClipboardPaste className="h-5 w-5" />
-                  {pasteMode ? "Press Ctrl+V to paste image" : "Click then paste image (Ctrl+V)"}
-                </button>
+            {cardImages.length > 0 && (
+              <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {cardImages.map((img) => (
+                  <div key={img.s3Key} className="relative overflow-hidden rounded-lg border border-gray-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.imageUrl} alt={img.originalName} className="aspect-video w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeCardImage(img.s3Key)}
+                      className="absolute right-1 top-1 rounded-full bg-white/90 p-1 shadow hover:bg-white"
+                    >
+                      <X className="h-3 w-3 text-gray-700" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
+
+            <div className="space-y-2">
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsCreateImageDragOver(true);
+                }}
+                onDragLeave={() => setIsCreateImageDragOver(false)}
+                onDrop={handleCreateImageDrop}
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-sm transition-colors ${
+                  isCreateImageDragOver
+                    ? "border-violet-500 bg-violet-50 text-violet-700"
+                    : "border-gray-300 text-gray-500 hover:border-violet-400 hover:bg-violet-50/50"
+                }`}
+              >
+                {imageUploading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-5 w-5" />
+                    Drag & drop or click to upload images ({cardImages.length}/{MAX_CARD_IMAGES})
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={imageUploading || cardImages.length >= MAX_CARD_IMAGES}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setPasteMode(true)}
+                className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed p-4 text-sm transition-colors ${
+                  pasteMode
+                    ? "border-violet-500 bg-violet-50 text-violet-700"
+                    : "border-gray-300 text-gray-500 hover:border-violet-400 hover:bg-violet-50/50"
+                }`}
+              >
+                <ClipboardPaste className="h-5 w-5" />
+                {pasteMode ? "Press Ctrl+V to paste image" : "Click then paste image (Ctrl+V)"}
+              </button>
+            </div>
           </div>
 
           <div>
@@ -1255,7 +1496,10 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
                     <button
                       key={tag}
                       type="button"
-                      onClick={() => applyTagSuggestion(tag)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyTagSuggestion(tag);
+                      }}
                       className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-violet-50"
                     >
                       {tag}
