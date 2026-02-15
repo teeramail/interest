@@ -434,8 +434,31 @@ function StudyCard({
   };
 
   const getYoutubeEmbedUrl = (url: string) => {
-    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
-    return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.replace(/^www\./, "");
+
+      if (host === "youtu.be") {
+        const id = parsed.pathname.split("/").filter(Boolean)[0];
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+
+      if (host === "youtube.com" || host === "m.youtube.com") {
+        if (parsed.pathname === "/watch") {
+          const id = parsed.searchParams.get("v");
+          return id ? `https://www.youtube.com/embed/${id}` : null;
+        }
+
+        if (parsed.pathname.startsWith("/shorts/") || parsed.pathname.startsWith("/embed/")) {
+          const id = parsed.pathname.split("/").filter(Boolean)[1];
+          return id ? `https://www.youtube.com/embed/${id}` : null;
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   };
 
   const embedUrl = card.youtubeUrl ? getYoutubeEmbedUrl(card.youtubeUrl) : null;
