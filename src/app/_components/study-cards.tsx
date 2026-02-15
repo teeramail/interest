@@ -110,6 +110,34 @@ const SUBJECT_TAG_SUGGESTIONS = [
   "problem solving",
 ];
 
+function getYoutubeEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+
+    if (host === "youtu.be") {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      if (parsed.pathname === "/watch") {
+        const id = parsed.searchParams.get("v");
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+
+      if (parsed.pathname.startsWith("/shorts/") || parsed.pathname.startsWith("/embed/")) {
+        const id = parsed.pathname.split("/").filter(Boolean)[1];
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function StudyCards() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
@@ -118,6 +146,7 @@ export function StudyCards() {
   const [showCompleted, setShowCompleted] = useState<boolean | undefined>(undefined);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCard, setEditingCard] = useState<number | null>(null);
+  const [selectedCard, setSelectedCard] = useState<any | null>(null);
 
   const utils = api.useUtils();
 
@@ -298,6 +327,13 @@ export function StudyCards() {
         />
       )}
 
+      {selectedCard && !editingCard && (
+        <StudyCardDetailModal
+          card={selectedCard}
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
+
       {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center py-20">
@@ -329,7 +365,10 @@ export function StudyCards() {
               card={card}
               viewMode={viewMode}
               isEditing={editingCard === card.id}
-              onEdit={() => setEditingCard(card.id)}
+              onEdit={() => {
+                setSelectedCard(null);
+                setEditingCard(card.id);
+              }}
               onSave={(data) => updateCard.mutate({ id: card.id, ...data })}
               onDelete={() => {
                 if (confirm("Delete this study card?")) {
@@ -337,10 +376,126 @@ export function StudyCards() {
                 }
               }}
               onCancel={() => setEditingCard(null)}
+              onView={() => setSelectedCard(card)}
             />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+interface StudyCardDetailModalProps {
+  card: any;
+  onClose: () => void;
+}
+
+function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
+  const parsedAttachments: Attachment[] = card.attachments ? JSON.parse(card.attachments) : [];
+  const cardImages: CardImageMeta[] = parsedAttachments
+    .filter((att) => att.kind === "card-image")
+    .map((att) => ({
+      s3Key: att.s3Key,
+      imageUrl: att.url,
+      subfolder: att.subfolder,
+      originalName: att.originalName,
+      fileSize: att.fileSize,
+    }));
+  const galleryImages = [...cardImages];
+  if (card.imageUrl && !galleryImages.some((img) => img.s3Key === card.imageS3Key || img.imageUrl === card.imageUrl)) {
+    galleryImages.unshift({
+      s3Key: card.imageS3Key ?? card.imageUrl,
+      imageUrl: card.imageUrl,
+      subfolder: "study-cards/images",
+      originalName: "Card image",
+      fileSize: 0,
+    });
+  }
+
+  const embedUrl = card.youtubeUrl ? getYoutubeEmbedUrl(card.youtubeUrl) : null;
+  const visibleAttachments = parsedAttachments.filter((att) => att.kind !== "card-image");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-2xl font-bold text-gray-900">{card.title}</h3>
+            <p className="mt-1 text-sm text-gray-500">{format(new Date(card.createdAt), "MMM d, yyyy")}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {galleryImages.length > 0 && (
+          <div className="mb-5">
+            <p className="mb-2 text-sm font-medium text-gray-700">Images</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {galleryImages.map((img) => (
+                <a key={img.s3Key} href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="relative aspect-video overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                  <Image src={img.imageUrl} alt={img.originalName} fill className="object-cover" unoptimized />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {embedUrl && (
+          <div className="mb-5">
+            <p className="mb-2 text-sm font-medium text-gray-700">Video</p>
+            <div className="aspect-video overflow-hidden rounded-lg border border-gray-200">
+              <iframe src={embedUrl} title={card.title} className="h-full w-full" allowFullScreen />
+            </div>
+          </div>
+        )}
+
+        <p className="text-gray-700">{card.description}</p>
+
+        {card.tags && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {card.tags.split(",").map((tag: string, idx: number) => (
+              <span key={idx} className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                {tag.trim()}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {card.notes && (
+          <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+            {card.notes}
+          </div>
+        )}
+
+        {visibleAttachments.length > 0 && (
+          <div className="mt-5 rounded-lg border border-gray-200 p-3">
+            <p className="mb-2 text-sm font-medium text-gray-700">Attachments</p>
+            <div className="space-y-2">
+              {visibleAttachments.map((att) => {
+                const Icon = getAttachmentIcon(att.mimeType);
+                return (
+                  <a
+                    key={att.s3Key}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm hover:bg-violet-50"
+                  >
+                    <Icon className="h-4 w-4 text-violet-500" />
+                    <span className="flex-1 truncate">{att.originalName}</span>
+                    <span className="text-xs text-gray-400">{formatFileSize(att.fileSize)}</span>
+                    <Download className="h-4 w-4 text-gray-400" />
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -353,6 +508,7 @@ interface StudyCardProps {
   onSave: (data: any) => void;
   onDelete: () => void;
   onCancel: () => void;
+  onView: () => void;
 }
 
 function StudyCard({
@@ -363,6 +519,7 @@ function StudyCard({
   onSave,
   onDelete,
   onCancel,
+  onView,
 }: StudyCardProps) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
@@ -529,34 +686,6 @@ function StudyCard({
       isCompleted,
       rating: rating || undefined,
     });
-  };
-
-  const getYoutubeEmbedUrl = (url: string) => {
-    try {
-      const parsed = new URL(url);
-      const host = parsed.hostname.replace(/^www\./, "");
-
-      if (host === "youtu.be") {
-        const id = parsed.pathname.split("/").filter(Boolean)[0];
-        return id ? `https://www.youtube.com/embed/${id}` : null;
-      }
-
-      if (host === "youtube.com" || host === "m.youtube.com") {
-        if (parsed.pathname === "/watch") {
-          const id = parsed.searchParams.get("v");
-          return id ? `https://www.youtube.com/embed/${id}` : null;
-        }
-
-        if (parsed.pathname.startsWith("/shorts/") || parsed.pathname.startsWith("/embed/")) {
-          const id = parsed.pathname.split("/").filter(Boolean)[1];
-          return id ? `https://www.youtube.com/embed/${id}` : null;
-        }
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
   };
 
   const embedUrl = card.youtubeUrl ? getYoutubeEmbedUrl(card.youtubeUrl) : null;
@@ -771,7 +900,10 @@ function StudyCard({
 
   if (viewMode === "list") {
     return (
-      <div className="flex items-center gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+      <div
+        onClick={onView}
+        className="flex cursor-pointer items-center gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md"
+      >
         {card.imageUrl && (
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg">
             <Image
@@ -819,19 +951,26 @@ function StudyCard({
               href={card.youtubeUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="rounded-lg p-2 text-red-500 hover:bg-red-50"
             >
               <Play className="h-4 w-4" />
             </a>
           )}
           <button
-            onClick={onEdit}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
           >
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={onDelete}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
             className="rounded-lg p-2 text-red-500 hover:bg-red-50"
           >
             <Trash2 className="h-4 w-4" />
@@ -842,17 +981,26 @@ function StudyCard({
   }
 
   return (
-    <div className="group relative rounded-xl bg-white shadow-sm ring-1 ring-gray-200 transition-all hover:shadow-md">
+    <div
+      onClick={onView}
+      className="group relative cursor-pointer rounded-xl bg-white shadow-sm ring-1 ring-gray-200 transition-all hover:shadow-md"
+    >
       {/* Header with actions */}
       <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
-          onClick={onEdit}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
           className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
         >
           <Edit className="h-3.5 w-3.5 text-gray-600" />
         </button>
         <button
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
         >
           <Trash2 className="h-3.5 w-3.5 text-red-400" />
@@ -921,6 +1069,7 @@ function StudyCard({
               href={card.youtubeUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 font-medium text-red-700 hover:bg-red-200"
             >
               <Play className="h-3 w-3" />
@@ -956,6 +1105,7 @@ function StudyCard({
                     href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
                     className="flex items-center gap-2 rounded bg-white px-2 py-1 text-xs hover:bg-violet-50"
                   >
                     <Icon className="h-3 w-3 text-violet-500" />
