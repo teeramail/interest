@@ -1,5 +1,3 @@
-import { mediaRouter } from "~/server/api/routers/media";
-import { folderRouter } from "~/server/api/routers/folder";
 import { studyCardsRouter } from "~/server/api/routers/study-cards";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
@@ -9,8 +7,6 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
-  media: mediaRouter,
-  folder: folderRouter,
   studyCards: studyCardsRouter,
 });
 

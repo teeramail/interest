@@ -1,63 +1,6 @@
-import { relations } from "drizzle-orm";
 import { index, pgTableCreator } from "drizzle-orm/pg-core";
 
 export const createTable = pgTableCreator((name) => `varit_${name}`);
-
-export const folders = createTable(
-  "folder",
-  (d) => ({
-    id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
-    name: d.varchar({ length: 255 }).notNull(),
-    parentId: d.integer(),
-    s3Path: d.varchar({ length: 1024 }).notNull(),
-    createdAt: d
-      .timestamp({ withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-  }),
-  (t) => [
-    index("folder_parent_idx").on(t.parentId),
-    index("folder_name_idx").on(t.name),
-  ]
-);
-
-export const foldersRelations = relations(folders, ({ one, many }) => ({
-  parent: one(folders, {
-    fields: [folders.parentId],
-    references: [folders.id],
-    relationName: "parentChild",
-  }),
-  children: many(folders, { relationName: "parentChild" }),
-  mediaItems: many(mediaItems),
-}));
-
-export const mediaItems = createTable(
-  "media_item",
-  (d) => ({
-    id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
-    fileName: d.varchar({ length: 512 }).notNull(),
-    originalName: d.varchar({ length: 512 }).notNull(),
-    mimeType: d.varchar({ length: 128 }).notNull(),
-    fileSize: d.integer().notNull(),
-    s3Key: d.varchar({ length: 1024 }).notNull(),
-    s3Url: d.varchar({ length: 2048 }).notNull(),
-    folderId: d.integer().references(() => folders.id, { onDelete: "set null" }),
-    note: d.text(),
-    sendDate: d.date({ mode: "string" }),
-    sent: d.boolean().default(false).notNull(),
-    createdAt: d
-      .timestamp({ withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
-  }),
-  (t) => [
-    index("media_folder_idx").on(t.folderId),
-    index("media_send_date_idx").on(t.sendDate),
-    index("media_sent_idx").on(t.sent),
-    index("media_created_idx").on(t.createdAt),
-  ]
-);
 
 export const studyCards = createTable(
   "study_card",
