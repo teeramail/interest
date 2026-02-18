@@ -551,6 +551,7 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
               href={card.referenceUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100"
             >
               <ExternalLink className="h-4 w-4" />
