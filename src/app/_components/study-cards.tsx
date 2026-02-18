@@ -120,7 +120,6 @@ function getYoutubeEmbedUrl(url: string) {
       const id = parsed.pathname.split("/").filter(Boolean)[0];
       return id ? `https://www.youtube.com/embed/${id}` : null;
     }
-
     if (host === "youtube.com" || host === "m.youtube.com") {
       if (parsed.pathname === "/watch") {
         const id = parsed.searchParams.get("v");
@@ -137,6 +136,97 @@ function getYoutubeEmbedUrl(url: string) {
   } catch {
     return null;
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function isSafeColorValue(value: string) {
+  const color = value.trim().toLowerCase();
+  if (!color || color.includes(";") || color.includes("url(") || color.includes("expression(")) {
+    return false;
+  }
+
+  return (
+    /^#[0-9a-f]{3,8}$/i.test(color) ||
+    /^rgba?\([\d\s.,%]+\)$/i.test(color) ||
+    /^hsla?\([\d\s.,%]+\)$/i.test(color) ||
+    /^[a-z]+$/i.test(color)
+  );
+}
+
+function sanitizeDescriptionHtml(raw: string) {
+  if (!raw) return "";
+  if (typeof window === "undefined") return escapeHtml(raw);
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${raw}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+
+  if (!root) return escapeHtml(raw);
+
+  const allowedTags = new Set(["br", "p", "div", "span", "strong", "b", "em", "i", "u"]);
+
+  const sanitizeNode = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return escapeHtml(node.textContent ?? "");
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+    const inner = Array.from(element.childNodes).map(sanitizeNode).join("");
+
+    if (!allowedTags.has(tag)) {
+      return inner;
+    }
+
+    if (tag === "br") {
+      return "<br />";
+    }
+
+    const color = element.style.color;
+    const styleAttr = color && isSafeColorValue(color) ? ` style="color:${color}"` : "";
+
+    return `<${tag}${styleAttr}>${inner}</${tag}>`;
+  };
+
+  return Array.from(root.childNodes).map(sanitizeNode).join("");
+}
+
+function getDescriptionHtml(description: string) {
+  const sanitized = sanitizeDescriptionHtml(description);
+  return sanitized || "&nbsp;";
+}
+
+function getDescriptionEditorHtml(description: string) {
+  if (!description) return "";
+
+  const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(description);
+  if (hasHtmlTags) {
+    return sanitizeDescriptionHtml(description);
+  }
+
+  return escapeHtml(description).replace(/\n/g, "<br />");
+}
+
+function getDescriptionPlainText(description: string) {
+  if (!description) return "";
+  if (typeof window === "undefined") {
+    return description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  const doc = new DOMParser().parseFromString(description, "text/html");
+  return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 export function StudyCards() {
@@ -469,7 +559,10 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
           </div>
         )}
 
-        <p className="whitespace-pre-wrap text-gray-700">{card.description}</p>
+        <div
+          className="whitespace-pre-wrap text-gray-700"
+          dangerouslySetInnerHTML={{ __html: getDescriptionHtml(card.description) }}
+        />
 
         {card.estimatedCost !== null && card.estimatedCost !== undefined && card.estimatedCost > 0 && (
           <div className="mt-4 flex items-center gap-2 text-sm">
@@ -685,6 +778,9 @@ function StudyCard({
   };
 
   const handleSave = () => {
+    const sanitizedDescription = sanitizeDescriptionHtml(description);
+    if (!title.trim() || !getDescriptionPlainText(sanitizedDescription)) return;
+
     const cardImageAttachments: Attachment[] = editedImages.map((img, index) => ({
       fileName: `card-image-${index + 1}.webp`,
       originalName: img.originalName,
@@ -698,7 +794,7 @@ function StudyCard({
 
     onSave({
       title,
-      description,
+      description: sanitizedDescription,
       referenceUrl: referenceUrl || undefined,
       youtubeUrl: youtubeUrl || undefined,
       imageUrl: editedImages[0]?.imageUrl,
@@ -740,13 +836,14 @@ function StudyCard({
             placeholder="Card title..."
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-medium focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description..."
-            rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          <div
+            contentEditable
+            suppressContentEditableWarning
+            onInput={(e) => setDescription((e.currentTarget as HTMLDivElement).innerHTML)}
+            dangerouslySetInnerHTML={{ __html: getDescriptionEditorHtml(description) }}
+            className="min-h-24 whitespace-pre-wrap rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
+          <p className="text-xs text-gray-500">Paste rich text here to keep font colors and line breaks.</p>
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Card Image</label>
             <div className="mb-2 flex items-center gap-2">
@@ -964,9 +1061,10 @@ function StudyCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <h3 className="truncate font-medium text-gray-900">{card.title}</h3>
-              <p className="mt-1 line-clamp-2 text-sm text-gray-600">
-                {card.description}
-              </p>
+              <div
+                className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-gray-600"
+                dangerouslySetInnerHTML={{ __html: getDescriptionHtml(card.description) }}
+              />
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
                 {card.category && <span>{card.category}</span>}
                 <span className="capitalize">{card.difficulty}</span>
@@ -1107,7 +1205,10 @@ function StudyCard({
       {/* Content */}
       <div className="p-4">
         <h3 className="font-semibold text-gray-900 line-clamp-1">{card.title}</h3>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600 line-clamp-3">{card.description}</p>
+        <div
+          className="mt-2 whitespace-pre-wrap text-sm text-gray-600 line-clamp-3"
+          dangerouslySetInnerHTML={{ __html: getDescriptionHtml(card.description) }}
+        />
 
         {/* Tags and metadata */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -1429,7 +1530,8 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) return;
+    const sanitizedDescription = sanitizeDescriptionHtml(description);
+    if (!title.trim() || !getDescriptionPlainText(sanitizedDescription)) return;
 
     const cardImageAttachments: Attachment[] = cardImages.map((img, index) => ({
       fileName: `card-image-${index + 1}.webp`,
@@ -1445,7 +1547,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
 
     onSubmit({
       title: title.trim(),
-      description: description.trim(),
+      description: sanitizedDescription,
       referenceUrl: referenceUrl.trim() || undefined,
       youtubeUrl: youtubeUrl.trim() || undefined,
       imageUrl: cardImages[0]?.imageUrl,
@@ -1490,14 +1592,14 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description *
             </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter description..."
-              rows={4}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              required
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              onInput={(e) => setDescription((e.currentTarget as HTMLDivElement).innerHTML)}
+              dangerouslySetInnerHTML={{ __html: getDescriptionEditorHtml(description) }}
+              className="min-h-28 whitespace-pre-wrap rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
             />
+            <p className="mt-1 text-xs text-gray-500">Paste or type rich text to preserve colors and paragraph spacing.</p>
           </div>
 
           {/* Card Image Upload with Subfolder & Clipboard Paste */}
@@ -1789,7 +1891,13 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || imageUploading || attachmentUploading || !title.trim() || !description.trim()}
+              disabled={
+                isSubmitting ||
+                imageUploading ||
+                attachmentUploading ||
+                !title.trim() ||
+                !getDescriptionPlainText(description)
+              }
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? "Creating..." : "Create Card"}
