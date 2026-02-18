@@ -73,6 +73,7 @@ export const studyCardsRouter = createTRPCRouter({
       z.object({
         title: z.string().min(1).max(255),
         description: z.string().min(1),
+        referenceUrl: z.string().url().optional(),
         youtubeUrl: z.string().url().optional(),
         imageUrl: z.string().optional(),
         imageS3Key: z.string().optional(),
@@ -89,6 +90,7 @@ export const studyCardsRouter = createTRPCRouter({
         .values({
           title: input.title,
           description: input.description,
+          referenceUrl: input.referenceUrl ?? null,
           youtubeUrl: input.youtubeUrl ?? null,
           imageUrl: input.imageUrl ?? null,
           imageS3Key: input.imageS3Key ?? null,
@@ -108,6 +110,7 @@ export const studyCardsRouter = createTRPCRouter({
         id: z.number(),
         title: z.string().min(1).max(255).optional(),
         description: z.string().min(1).optional(),
+        referenceUrl: z.string().url().optional(),
         youtubeUrl: z.string().url().optional(),
         imageUrl: z.string().optional(),
         imageS3Key: z.string().optional(),

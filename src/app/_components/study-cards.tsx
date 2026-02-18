@@ -24,6 +24,7 @@ import {
   List,
   Folder,
   ClipboardPaste,
+  ExternalLink,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { format } from "date-fns";
@@ -453,6 +454,21 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
           </div>
         )}
 
+        {card.referenceUrl && (
+          <div className="mb-5">
+            <p className="mb-2 text-sm font-medium text-gray-700">Reference Link</p>
+            <a
+              href={card.referenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open link
+            </a>
+          </div>
+        )}
+
         <p className="text-gray-700">{card.description}</p>
 
         {card.tags && (
@@ -523,6 +539,7 @@ function StudyCard({
 }: StudyCardProps) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
+  const [referenceUrl, setReferenceUrl] = useState(card.referenceUrl ?? "");
   const [youtubeUrl, setYoutubeUrl] = useState(card.youtubeUrl ?? "");
   const [category, setCategory] = useState(card.category ?? "");
   const [difficulty, setDifficulty] = useState(card.difficulty ?? "medium");
@@ -672,6 +689,7 @@ function StudyCard({
     onSave({
       title,
       description,
+      referenceUrl: referenceUrl || undefined,
       youtubeUrl: youtubeUrl || undefined,
       imageUrl: editedImages[0]?.imageUrl,
       imageS3Key: editedImages[0]?.s3Key,
@@ -781,6 +799,13 @@ function StudyCard({
               />
             </label>
           </div>
+          <input
+            value={referenceUrl}
+            onChange={(e) => setReferenceUrl(e.target.value)}
+            placeholder="Reference URL (optional)..."
+            type="url"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
           <input
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -946,6 +971,17 @@ function StudyCard({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {card.referenceUrl && (
+            <a
+              href={card.referenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-lg p-2 text-violet-600 hover:bg-violet-50"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
           {card.youtubeUrl && (
             <a
               href={card.youtubeUrl}
@@ -1076,6 +1112,18 @@ function StudyCard({
               Video
             </a>
           )}
+          {card.referenceUrl && (
+            <a
+              href={card.referenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-1 font-medium text-violet-700 hover:bg-violet-200"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Link
+            </a>
+          )}
         </div>
 
         {/* Tags */}
@@ -1177,6 +1225,7 @@ interface CreateCardFormProps {
 function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [referenceUrl, setReferenceUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [category, setCategory] = useState("");
   const [difficulty, setDifficulty] = useState("medium");
@@ -1372,6 +1421,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
     onSubmit({
       title: title.trim(),
       description: description.trim(),
+      referenceUrl: referenceUrl.trim() || undefined,
       youtubeUrl: youtubeUrl.trim() || undefined,
       imageUrl: cardImages[0]?.imageUrl,
       imageS3Key: cardImages[0]?.s3Key,
@@ -1508,6 +1558,19 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
                 {pasteMode ? "Press Ctrl+V to paste image" : "Click then paste image (Ctrl+V)"}
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Reference URL
+            </label>
+            <input
+              value={referenceUrl}
+              onChange={(e) => setReferenceUrl(e.target.value)}
+              placeholder="https://example.com/article"
+              type="url"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
           </div>
 
           <div>

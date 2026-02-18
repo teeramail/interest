@@ -8,6 +8,7 @@ export const studyCards = createTable(
     id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
     title: d.varchar({ length: 255 }).notNull(),
     description: d.text().notNull(),
+    referenceUrl: d.varchar({ length: 2048 }),
     youtubeUrl: d.varchar({ length: 1024 }),
     imageUrl: d.varchar({ length: 2048 }),
     imageS3Key: d.varchar({ length: 1024 }),
