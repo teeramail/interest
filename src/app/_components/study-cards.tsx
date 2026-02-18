@@ -469,7 +469,7 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
           </div>
         )}
 
-        <p className="text-gray-700">{card.description}</p>
+        <p className="whitespace-pre-wrap text-gray-700">{card.description}</p>
 
         {card.estimatedCost !== null && card.estimatedCost !== undefined && card.estimatedCost > 0 && (
           <div className="mt-4 flex items-center gap-2 text-sm">
@@ -1107,7 +1107,7 @@ function StudyCard({
       {/* Content */}
       <div className="p-4">
         <h3 className="font-semibold text-gray-900 line-clamp-1">{card.title}</h3>
-        <p className="mt-2 text-sm text-gray-600 line-clamp-3">{card.description}</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600 line-clamp-3">{card.description}</p>
 
         {/* Tags and metadata */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
