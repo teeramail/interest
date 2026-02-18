@@ -471,6 +471,15 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
 
         <p className="text-gray-700">{card.description}</p>
 
+        {card.estimatedCost !== null && card.estimatedCost !== undefined && card.estimatedCost > 0 && (
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            <span className="font-medium text-gray-700">Estimated Cost:</span>
+            <span className="rounded-full bg-green-100 px-2 py-1 font-medium text-green-700">
+              ${card.estimatedCost}
+            </span>
+          </div>
+        )}
+
         {card.tags && (
           <div className="mt-4 flex flex-wrap gap-2">
             {card.tags.split(",").map((tag: string, idx: number) => (
@@ -548,6 +557,7 @@ function StudyCard({
   const [notes, setNotes] = useState(card.notes ?? "");
   const [isCompleted, setIsCompleted] = useState(card.isCompleted);
   const [rating, setRating] = useState(card.rating ?? 0);
+  const [estimatedCost, setEstimatedCost] = useState<number | "">(card.estimatedCost ?? "");
   const [imageUploading, setImageUploading] = useState(false);
   const [imageSubfolder, setImageSubfolder] = useState("study-cards/images");
   const [isEditImageDragOver, setIsEditImageDragOver] = useState(false);
@@ -703,6 +713,7 @@ function StudyCard({
       notes: notes || undefined,
       isCompleted,
       rating: rating || undefined,
+      estimatedCost: estimatedCost === "" ? undefined : Number(estimatedCost),
     });
   };
 
@@ -810,6 +821,14 @@ function StudyCard({
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
             placeholder="YouTube URL (optional)..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+          <input
+            value={estimatedCost}
+            onChange={(e) => setEstimatedCost(e.target.value === "" ? "" : Number(e.target.value))}
+            placeholder="Estimated Cost (optional)..."
+            type="number"
+            min="0"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <div className="grid grid-cols-2 gap-3">
@@ -1100,6 +1119,11 @@ function StudyCard({
           <span className="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-600 capitalize">
             {card.difficulty}
           </span>
+          {card.estimatedCost !== null && card.estimatedCost !== undefined && card.estimatedCost > 0 && (
+            <span className="rounded-full bg-green-100 px-2 py-1 font-medium text-green-700">
+              ${card.estimatedCost}
+            </span>
+          )}
           {card.youtubeUrl && (
             <a
               href={card.youtubeUrl}
@@ -1232,6 +1256,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const [tags, setTags] = useState("");
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [notes, setNotes] = useState("");
+  const [estimatedCost, setEstimatedCost] = useState<number | "">("");
   const [subfolder, setSubfolder] = useState("study-cards/images");
 
   const [cardImages, setCardImages] = useState<CardImageMeta[]>([]);
@@ -1430,6 +1455,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
       difficulty,
       tags: tags.trim() || undefined,
       notes: notes.trim() || undefined,
+      estimatedCost: estimatedCost === "" ? undefined : Number(estimatedCost),
     });
   };
 
@@ -1582,6 +1608,20 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
               onChange={(e) => setYoutubeUrl(e.target.value)}
               placeholder="https://youtube.com/watch?v=..."
               type="url"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Estimated Cost
+            </label>
+            <input
+              value={estimatedCost}
+              onChange={(e) => setEstimatedCost(e.target.value === "" ? "" : Number(e.target.value))}
+              placeholder="Enter estimated cost (e.g., 100)"
+              type="number"
+              min="0"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
             />
           </div>

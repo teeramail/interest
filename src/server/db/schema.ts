@@ -18,6 +18,7 @@ export const studyCards = createTable(
     tags: d.text(),
     isCompleted: d.boolean().default(false).notNull(),
     rating: d.integer().default(0),
+    estimatedCost: d.integer().default(0),
     notes: d.text(),
     createdAt: d
       .timestamp({ withTimezone: true })
