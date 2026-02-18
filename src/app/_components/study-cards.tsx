@@ -1223,7 +1223,7 @@ function StudyCard({
           </span>
           {card.estimatedCost !== null && card.estimatedCost !== undefined && card.estimatedCost > 0 && (
             <span className="rounded-full bg-green-100 px-2 py-1 font-medium text-green-700">
-              ${card.estimatedCost}
+              ${card.estimatedCost.toLocaleString()}
             </span>
           )}
           {card.youtubeUrl && (
