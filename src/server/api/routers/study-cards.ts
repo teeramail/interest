@@ -83,6 +83,7 @@ export const studyCardsRouter = createTRPCRouter({
         tags: z.string().optional(),
         notes: z.string().optional(),
         estimatedCost: z.number().min(0).optional(),
+        investDate: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -101,6 +102,7 @@ export const studyCardsRouter = createTRPCRouter({
           tags: input.tags ?? null,
           notes: input.notes ?? null,
           estimatedCost: input.estimatedCost ?? 0,
+          investDate: input.investDate ? new Date(input.investDate) : null,
         })
         .returning();
       return result[0];
@@ -124,6 +126,7 @@ export const studyCardsRouter = createTRPCRouter({
         rating: z.number().min(0).max(5).optional(),
         notes: z.string().optional(),
         estimatedCost: z.number().min(0).optional(),
+        investDate: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

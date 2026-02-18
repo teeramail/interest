@@ -569,7 +569,16 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
           <div className="mt-4 flex items-center gap-2 text-sm">
             <span className="font-medium text-gray-700">Estimated Cost:</span>
             <span className="rounded-full bg-green-100 px-2 py-1 font-medium text-green-700">
-              ${card.estimatedCost}
+              ${card.estimatedCost.toLocaleString()}
+            </span>
+          </div>
+        )}
+
+        {card.investDate && (
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            <span className="font-medium text-gray-700">Invest Date:</span>
+            <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-700">
+              {format(new Date(card.investDate), "MMM d, yyyy")}
             </span>
           </div>
         )}
@@ -652,6 +661,7 @@ function StudyCard({
   const [isCompleted, setIsCompleted] = useState(card.isCompleted);
   const [rating, setRating] = useState(card.rating ?? 0);
   const [estimatedCost, setEstimatedCost] = useState<number | "">(card.estimatedCost ?? "");
+  const [investDate, setInvestDate] = useState(card.investDate ? new Date(card.investDate).toISOString().split("T")[0] : "");
   const [imageUploading, setImageUploading] = useState(false);
   const [imageSubfolder, setImageSubfolder] = useState("study-cards/images");
   const [isEditImageDragOver, setIsEditImageDragOver] = useState(false);
@@ -811,6 +821,7 @@ function StudyCard({
       isCompleted,
       rating: rating || undefined,
       estimatedCost: estimatedCost === "" ? undefined : Number(estimatedCost),
+      investDate: investDate || undefined,
     });
   };
 
@@ -927,6 +938,13 @@ function StudyCard({
             placeholder="Estimated Cost (optional)..."
             type="number"
             min="0"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+          <input
+            value={investDate}
+            onChange={(e) => setInvestDate(e.target.value)}
+            placeholder="Invest Date (optional)..."
+            type="date"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <div className="grid grid-cols-2 gap-3">
@@ -1226,6 +1244,11 @@ function StudyCard({
               ${card.estimatedCost.toLocaleString()}
             </span>
           )}
+          {card.investDate && (
+            <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-700">
+              {format(new Date(card.investDate), "MMM d, yyyy")}
+            </span>
+          )}
           {card.youtubeUrl && (
             <a
               href={card.youtubeUrl}
@@ -1359,6 +1382,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [notes, setNotes] = useState("");
   const [estimatedCost, setEstimatedCost] = useState<number | "">("");
+  const [investDate, setInvestDate] = useState("");
   const [subfolder, setSubfolder] = useState("study-cards/images");
 
   const [cardImages, setCardImages] = useState<CardImageMeta[]>([]);
@@ -1559,6 +1583,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
       tags: tags.trim() || undefined,
       notes: notes.trim() || undefined,
       estimatedCost: estimatedCost === "" ? undefined : Number(estimatedCost),
+      investDate: investDate || undefined,
     });
   };
 
@@ -1725,6 +1750,18 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
               placeholder="Enter estimated cost (e.g., 100)"
               type="number"
               min="0"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Invest Date
+            </label>
+            <input
+              value={investDate}
+              onChange={(e) => setInvestDate(e.target.value)}
+              type="date"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
             />
           </div>

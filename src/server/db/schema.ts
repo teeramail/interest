@@ -20,6 +20,7 @@ export const studyCards = createTable(
     rating: d.integer().default(0),
     estimatedCost: d.integer().default(0),
     notes: d.text(),
+    investDate: d.date(),
     createdAt: d
       .timestamp({ withTimezone: true })
       .$defaultFn(() => new Date())
