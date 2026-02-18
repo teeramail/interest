@@ -1,18 +1,26 @@
-// export const dynamic = "force-dynamic";
+import "server-only";
 
-//** @type {import("next").NextConfig} */
-const config = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "sgp1.digitaloceanspaces.com",
-      },
-    ],
-  },
-  // Disable static generation for error pages to avoid prerender issues
-  experimental: {
-    // Use dynamic rendering for error pages
-    missingSuspenseWithCSRBailout: false,
-  },
-};
+import { createHydrationHelpers } from "@trpc/react-query/rsc";
+import { headers } from "next/headers";
+import { cache } from "react";
+
+import { createCaller, type AppRouter } from "~/server/api/root";
+import { createTRPCContext } from "~/server/api/trpc";
+import { createQueryClient } from "./query-client";
+
+const createContext = cache(async () => {
+  const heads = new Headers(await headers());
+  heads.set("x-trpc-source", "rsc");
+
+  return createTRPCContext({
+    headers: heads,
+  });
+});
+
+const getQueryClient = cache(createQueryClient);
+const caller = createCaller(createContext);
+
+export const { trpc: api, HydrateClient } = createHydrationHelpers<AppRouter>(
+  caller,
+  getQueryClient
+);
