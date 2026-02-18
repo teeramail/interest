@@ -14,6 +14,10 @@ const config = {
       },
     ],
   },
+  experimental: {
+    // Disable PPR to avoid App Router incompatibility
+    ppr: false,
+  },
 };
 
 export default config;
