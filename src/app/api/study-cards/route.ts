@@ -6,6 +6,7 @@ import { env } from "~/env";
 
 /**
  * Read-only Study Cards API for President App
+ * Exposes study card data for the executive dashboard
  */
 export async function GET(request: Request) {
   const apiKey = env.PRESIDENT_API_KEY;
