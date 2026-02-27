@@ -102,7 +102,7 @@ export const studyCardsRouter = createTRPCRouter({
           tags: input.tags ?? null,
           notes: input.notes ?? null,
           estimatedCost: input.estimatedCost ?? 0,
-          investDate: input.investDate ? new Date(input.investDate) : null,
+          investDate: input.investDate ?? null,
         })
         .returning();
       return result[0];
