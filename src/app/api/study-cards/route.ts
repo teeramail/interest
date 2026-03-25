@@ -1,8 +1,9 @@
+import { and, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+import { env } from "~/env";
 import { db } from "~/server/db";
 import { studyCards } from "~/server/db/schema";
-import { desc, eq, and, like, sql } from "drizzle-orm";
-import { env } from "~/env";
 
 /**
  * Read-only Study Cards API for President App
@@ -16,7 +17,6 @@ import { env } from "~/env";
  *   - search: search in title/description
  */
 export async function GET(request: Request) {
-  // --- API Key Authentication ---
   const apiKey = env.PRESIDENT_API_KEY;
   if (apiKey) {
     const authHeader = request.headers.get("authorization");
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (providedKey !== apiKey) {
       return NextResponse.json(
         { error: "Unauthorized. Invalid or missing API key." },
-        { status: 401 }
+        { status: 401 },
       );
     }
   }
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     if (search) {
       conditions.push(
-        sql`(${studyCards.title} ILIKE ${`%${search}%`} OR ${studyCards.description} ILIKE ${`%${search}%`})`
+        sql`(${studyCards.title} ILIKE ${`%${search}%`} OR ${studyCards.description} ILIKE ${`%${search}%`})`,
       );
     }
 
@@ -56,7 +56,6 @@ export async function GET(request: Request) {
       .orderBy(desc(studyCards.createdAt))
       .limit(limit);
 
-    // Get categories list
     const categoriesResult = await db
       .select({ category: studyCards.category })
       .from(studyCards)
@@ -64,11 +63,8 @@ export async function GET(request: Request) {
       .groupBy(studyCards.category)
       .orderBy(studyCards.category);
 
-    const categories = categoriesResult
-      .map((r) => r.category)
-      .filter(Boolean);
+    const categories = categoriesResult.map((r) => r.category).filter(Boolean);
 
-    // Get stats
     const totalResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(studyCards);
@@ -83,7 +79,7 @@ export async function GET(request: Request) {
     console.error("[Study Cards API] Error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
