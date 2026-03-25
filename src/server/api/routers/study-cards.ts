@@ -78,6 +78,8 @@ export const studyCardsRouter = createTRPCRouter({
         imageUrl: z.string().optional(),
         imageS3Key: z.string().optional(),
         attachments: z.string().optional(),
+        groupCalendar: z.string().optional(),
+        expenses: z.string().optional(),
         category: z.string().max(100).optional(),
         difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
         tags: z.string().optional(),
@@ -97,12 +99,14 @@ export const studyCardsRouter = createTRPCRouter({
           imageUrl: input.imageUrl ?? null,
           imageS3Key: input.imageS3Key ?? null,
           attachments: input.attachments ?? null,
+          groupCalendar: input.groupCalendar ?? null,
+          expenses: input.expenses ?? null,
           category: input.category ?? null,
           difficulty: input.difficulty,
           tags: input.tags ?? null,
           notes: input.notes ?? null,
           estimatedCost: input.estimatedCost ?? 0,
-          investDate: input.investDate ? new Date(input.investDate) : null,
+          investDate: input.investDate ?? null,
         })
         .returning();
       return result[0];
@@ -119,6 +123,8 @@ export const studyCardsRouter = createTRPCRouter({
         imageUrl: z.string().optional(),
         imageS3Key: z.string().optional(),
         attachments: z.string().optional(),
+        groupCalendar: z.string().optional(),
+        expenses: z.string().optional(),
         category: z.string().max(100).optional(),
         difficulty: z.enum(["easy", "medium", "hard"]).optional(),
         tags: z.string().optional(),
@@ -217,6 +223,13 @@ export const studyCardsRouter = createTRPCRouter({
       .orderBy(studyCards.category);
     return result.map((r) => r.category).filter(Boolean);
   }),
+
+  deleteAttachmentFile: publicProcedure
+    .input(z.object({ s3Key: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      await deleteS3Object(input.s3Key);
+      return { success: true };
+    }),
 
   getStats: publicProcedure.query(async ({ ctx }) => {
     const totalResult = await ctx.db

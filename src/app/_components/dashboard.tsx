@@ -1,10 +1,19 @@
 "use client";
 
 import { Heart } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { brand } from "~/config/brand";
 import { StudyCards } from "./study-cards";
 import { StatsBar } from "./stats-bar";
 
 export function Dashboard() {
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-rose-50">
       {/* Header */}
@@ -16,11 +25,19 @@ export function Dashboard() {
                 <Heart className="h-5 w-5 text-white" fill="white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Varit</h1>
-                <p className="text-xs text-gray-500">Study Cards for your kid</p>
+                <h1 className="text-xl font-bold text-gray-900">{brand.name}</h1>
+                <p className="text-xs text-gray-500">{brand.tagline}</p>
               </div>
             </div>
-            <StatsBar />
+            <div className="flex items-center gap-3">
+              <StatsBar />
+              <button
+                onClick={handleLogout}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </header>

@@ -13,6 +13,9 @@ export const env = createEnv({
     AWS_REGION: z.string(),
     AWS_ENDPOINT: z.string().url(),
     AWS_S3_ROOT_FOLDER: z.string().default("varit"),
+    VALID_EMAIL: z.string().optional(),
+    VALID_PASSWORD: z.string().optional(),
+    PRESIDENT_API_KEY: z.string().optional(),
   },
 
   client: {},
@@ -26,6 +29,9 @@ export const env = createEnv({
     AWS_REGION: process.env.AWS_REGION,
     AWS_ENDPOINT: process.env.AWS_ENDPOINT,
     AWS_S3_ROOT_FOLDER: process.env.AWS_S3_ROOT_FOLDER,
+    VALID_EMAIL: process.env.VALID_EMAIL,
+    VALID_PASSWORD: process.env.VALID_PASSWORD,
+    PRESIDENT_API_KEY: process.env.PRESIDENT_API_KEY,
   },
 
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
