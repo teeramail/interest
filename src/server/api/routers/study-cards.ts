@@ -1,5 +1,7 @@
 import { eq, desc, and, like, sql } from "drizzle-orm";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { getCardPermissions } from "~/config/card-settings";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { studyCards } from "~/server/db/schema";
 import { generateUploadUrl, getS3Key, getPublicUrl, deleteS3Object } from "~/server/s3";
@@ -138,14 +140,30 @@ export const studyCardsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
 
-      if (updates.imageS3Key) {
-        const existingCard = await ctx.db
-          .select({ imageS3Key: studyCards.imageS3Key })
-          .from(studyCards)
-          .where(eq(studyCards.id, id))
-          .limit(1);
+      const existingCard = await ctx.db
+        .select({ id: studyCards.id, title: studyCards.title, imageS3Key: studyCards.imageS3Key })
+        .from(studyCards)
+        .where(eq(studyCards.id, id))
+        .limit(1);
 
-        const previousImageKey = existingCard[0]?.imageS3Key;
+      const currentCard = existingCard[0];
+
+      if (!currentCard) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Study card not found",
+        });
+      }
+
+      if (!getCardPermissions(currentCard.title).canEditCard) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This card is locked and cannot be edited",
+        });
+      }
+
+      if (updates.imageS3Key) {
+        const previousImageKey = currentCard.imageS3Key;
         if (previousImageKey && previousImageKey !== updates.imageS3Key) {
           await deleteS3Object(previousImageKey);
         }
@@ -168,8 +186,24 @@ export const studyCardsRouter = createTRPCRouter({
         .where(eq(studyCards.id, input.id))
         .limit(1);
 
-      if (card[0]?.imageS3Key) {
-        await deleteS3Object(card[0].imageS3Key);
+      const existingCard = card[0];
+
+      if (!existingCard) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Study card not found",
+        });
+      }
+
+      if (!getCardPermissions(existingCard.title).canDeleteCard) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This card is locked and cannot be deleted",
+        });
+      }
+
+      if (existingCard.imageS3Key) {
+        await deleteS3Object(existingCard.imageS3Key);
       }
 
       await ctx.db.delete(studyCards).where(eq(studyCards.id, input.id));

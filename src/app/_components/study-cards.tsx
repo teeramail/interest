@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
@@ -33,6 +34,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { api } from "~/trpc/react";
+import { getCardPermissions } from "~/config/card-settings";
 import { CardTabsContainer } from "./card-tabs-container";
 import { format } from "date-fns";
 import { CardDiscussion } from "./card-discussion";
@@ -156,16 +158,18 @@ function getDescriptionPlainText(description: string) {
 }
 
 export function StudyCards() {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const utils = api.useUtils();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDifficulty, setSelectedDifficulty] = useState("");
   const [showCompleted, setShowCompleted] = useState<boolean | undefined>(undefined);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [editingCard, setEditingCard] = useState<number | null>(null);
   const [selectedCard, setSelectedCard] = useState<any | null>(null);
-
-  const utils = api.useUtils();
 
   const { data: cardsData, isLoading } = api.studyCards.getAll.useQuery({
     search: search || undefined,
@@ -200,6 +204,15 @@ export function StudyCards() {
       void utils.studyCards.getStats.invalidate();
     },
   });
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") {
+      return;
+    }
+
+    setShowCreateForm(true);
+    router.replace(pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const uploadImage = api.studyCards.uploadImage.useMutation();
 
@@ -254,7 +267,12 @@ export function StudyCards() {
             </div>
           </div>
           <button
-            onClick={() => setShowCreateForm(true)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowCreateForm(true);
+            }}
             className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
           >
             <Plus className="h-4 w-4" />
@@ -383,11 +401,13 @@ export function StudyCards() {
               viewMode={viewMode}
               isEditing={editingCard === card.id}
               onEdit={() => {
+                if (!getCardPermissions(card.title).canEditCard) return;
                 setSelectedCard(null);
                 setEditingCard(card.id);
               }}
               onSave={(data) => updateCard.mutate({ id: card.id, ...data })}
               onDelete={() => {
+                if (!getCardPermissions(card.title).canDeleteCard) return;
                 if (confirm("Delete this study card?")) {
                   deleteCard.mutate({ id: card.id });
                 }
@@ -401,12 +421,14 @@ export function StudyCards() {
     </div>
   );
 }
+
 interface StudyCardDetailModalProps {
   card: any;
   onClose: () => void;
 }
 
 function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
+  const permissions = getCardPermissions(card.title);
   const allParsed: Attachment[] = card.attachments ? (JSON.parse(card.attachments) as Attachment[]) : [];
   const cardImgAttachments = useRef<Attachment[]>(allParsed.filter((a) => a.kind === "card-image"));
 
@@ -439,11 +461,13 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
   const deleteAttFile = api.studyCards.deleteAttachmentFile.useMutation();
 
   const persistAttachments = (next: Attachment[]) => {
+    if (!permissions.canEditCard) return;
     const all = [...cardImgAttachments.current, ...next];
     void updateCard.mutateAsync({ id: card.id as number, attachments: JSON.stringify(all) });
   };
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!permissions.canEditCard) return;
     const files = e.target.files;
     if (!files?.length) return;
     setAttUploading(true);
@@ -488,6 +512,7 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
   };
 
   const handleAddAttachmentLink = () => {
+    if (!permissions.canEditCard) return;
     const url = attLinkUrl.trim();
     const name = attLinkName.trim() || url;
     if (!url) return;
@@ -506,6 +531,7 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
   };
 
   const handleDeleteAttachment = (idx: number) => {
+    if (!permissions.canEditCard) return;
     const att = localAttachments[idx]!;
     if (att.mimeType !== "text/x-url" && !att.s3Key.startsWith("link_")) {
       void deleteAttFile.mutateAsync({ s3Key: att.s3Key });
@@ -518,6 +544,7 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
   };
 
   const handleRenameAttachment = (idx: number) => {
+    if (!permissions.canEditCard) return;
     const name = editingName.trim();
     if (!name) { setEditingIdx(null); return; }
     setLocalAttachments((prev) => {
@@ -686,22 +713,26 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
                         {att.fileSize > 0 && (
                           <span className="shrink-0 text-xs text-gray-400">{formatFileSize(att.fileSize)}</span>
                         )}
-                        <button
-                          type="button"
-                          title="Rename"
-                          onClick={() => { setEditingIdx(idx); setEditingName(att.originalName); }}
-                          className="shrink-0 rounded p-0.5 text-gray-400 hover:text-violet-600"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete"
-                          onClick={() => handleDeleteAttachment(idx)}
-                          className="shrink-0 rounded p-0.5 text-gray-400 hover:text-red-500"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {permissions.canEditCard && (
+                          <button
+                            type="button"
+                            title="Rename"
+                            onClick={() => { setEditingIdx(idx); setEditingName(att.originalName); }}
+                            className="shrink-0 rounded p-0.5 text-gray-400 hover:text-violet-600"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {permissions.canEditCard && (
+                          <button
+                            type="button"
+                            title="Delete"
+                            onClick={() => handleDeleteAttachment(idx)}
+                            className="shrink-0 rounded p-0.5 text-gray-400 hover:text-red-500"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -711,48 +742,52 @@ function StudyCardDetailModal({ card, onClose }: StudyCardDetailModalProps) {
           )}
 
           {/* add file */}
-          <label className={`flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-violet-400 hover:text-violet-600 ${attUploading ? "pointer-events-none opacity-60" : ""}`}>
-            {attUploading ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /><span>Uploading…</span></>
-            ) : (
-              <><Paperclip className="h-4 w-4" /><span>Upload file (PDF, image, ZIP…)</span></>
-            )}
-            <input
-              type="file"
-              multiple
-              className="hidden"
-              onChange={handleAttachmentUpload}
-              disabled={attUploading}
-            />
-          </label>
+          {permissions.canEditCard && (
+            <>
+              <label className={`flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-violet-400 hover:text-violet-600 ${attUploading ? "pointer-events-none opacity-60" : ""}`}>
+                {attUploading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /><span>Uploading…</span></>
+                ) : (
+                  <><Paperclip className="h-4 w-4" /><span>Upload file (PDF, image, ZIP…)</span></>
+                )}
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleAttachmentUpload}
+                  disabled={attUploading}
+                />
+              </label>
 
-          {/* add link */}
-          <div className="mt-2 flex items-center gap-2">
-            <Link className="h-4 w-4 shrink-0 text-gray-400" />
-            <input
-              type="url"
-              value={attLinkUrl}
-              onChange={(e) => setAttLinkUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddAttachmentLink(); } }}
-              placeholder="https://…  (Facebook, Drive, website…)"
-              className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
-            />
-            <input
-              type="text"
-              value={attLinkName}
-              onChange={(e) => setAttLinkName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddAttachmentLink(); } }}
-              placeholder="Name (optional)"
-              className="w-28 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleAddAttachmentLink}
-              className="shrink-0 rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-200"
-            >
-              Add link
-            </button>
-          </div>
+              {/* add link */}
+              <div className="mt-2 flex items-center gap-2">
+                <Link className="h-4 w-4 shrink-0 text-gray-400" />
+                <input
+                  type="url"
+                  value={attLinkUrl}
+                  onChange={(e) => setAttLinkUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddAttachmentLink(); } }}
+                  placeholder="https://…  (Facebook, Drive, website…)"
+                  className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={attLinkName}
+                  onChange={(e) => setAttLinkName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddAttachmentLink(); } }}
+                  placeholder="Name (optional)"
+                  className="w-28 rounded border border-gray-200 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAttachmentLink}
+                  className="shrink-0 rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-200"
+                >
+                  Add link
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -780,6 +815,7 @@ function StudyCard({
   onCancel,
   onView,
 }: StudyCardProps) {
+  const permissions = getCardPermissions(card.title);
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
   const [referenceUrl, setReferenceUrl] = useState(card.referenceUrl ?? "");
@@ -838,8 +874,9 @@ function StudyCard({
   const uploadEditedImage = async (file: File) => {
     setImageUploading(true);
     try {
+      const compressedFile = await compressCardImage(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressedFile);
       formData.append("subfolder", imageSubfolder);
 
       const res = await fetch("/api/upload-card-image", {
@@ -862,8 +899,9 @@ function StudyCard({
         originalName: file.name,
         fileSize: data.compressedSize,
       } satisfies CardImageMeta;
-    } catch {
-      alert("Image upload failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Image upload failed";
+      alert(message);
       return null;
     } finally {
       setImageUploading(false);
@@ -1127,6 +1165,7 @@ function StudyCard({
                 disabled={imageUploading || editedImages.length >= MAX_CARD_IMAGES}
               />
             </label>
+            <p className="text-xs text-gray-500">Accepts mobile photos up to {MAX_CARD_IMAGE_INPUT_LABEL} each, then compresses before upload.</p>
           </div>
           <input
             value={referenceUrl}
@@ -1446,24 +1485,28 @@ function StudyCard({
               <Play className="h-4 w-4" />
             </a>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {permissions.canEditCard && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+              >
+                <Edit className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1475,26 +1518,28 @@ function StudyCard({
       className="group relative cursor-pointer rounded-xl bg-white shadow-sm ring-1 ring-gray-200 transition-all hover:shadow-md"
     >
       {/* Header with actions */}
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
-        >
-          <Edit className="h-3.5 w-3.5 text-gray-600" />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-red-400" />
-        </button>
-      </div>
+      {permissions.canEditCard && (
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
+          >
+            <Edit className="h-3.5 w-3.5 text-gray-600" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+          </button>
+        </div>
+      )}
 
       {/* Status badges */}
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
@@ -1669,6 +1714,8 @@ interface CardImageMeta {
 }
 
 const MAX_CARD_IMAGES = 10;
+const MAX_CARD_IMAGE_INPUT_BYTES = 25 * 1024 * 1024;
+const MAX_CARD_IMAGE_INPUT_LABEL = "25 MB";
 const MAX_ATTACHMENT_SIZE_BYTES = 12 * 1024 * 1024;
 const MAX_ATTACHMENT_SIZE_LABEL = "12 MB";
 
@@ -1676,6 +1723,61 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function compressCardImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are allowed.");
+  }
+
+  if (file.size > MAX_CARD_IMAGE_INPUT_BYTES) {
+    throw new Error(`Each image must be ${MAX_CARD_IMAGE_INPUT_LABEL} or smaller before upload.`);
+  }
+
+  if (typeof window === "undefined") {
+    return file;
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const maxDimension = 1600;
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("Image compression is not supported in this browser.");
+  }
+
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  let quality = 0.82;
+  let blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((result) => resolve(result), "image/webp", quality);
+  });
+
+  while (blob && blob.size > 350 * 1024 && quality > 0.4) {
+    quality -= 0.08;
+    blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((result) => resolve(result), "image/webp", quality);
+    });
+  }
+
+  if (!blob) {
+    throw new Error("Image compression failed.");
+  }
+
+  const compressedName = file.name.replace(/\.[^.]+$/, "") || `image-${Date.now()}`;
+  return new File([blob], `${compressedName}.webp`, {
+    type: "image/webp",
+    lastModified: Date.now(),
+  });
 }
 
 function getAttachmentIcon(mimeType: string) {
@@ -1766,8 +1868,9 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
     setImageUploading(true);
 
     try {
+      const compressedFile = await compressCardImage(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressedFile);
       formData.append("subfolder", subfolder);
 
       const res = await fetch("/api/upload-card-image", {
@@ -1790,8 +1893,9 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
         originalName: file.name,
         fileSize: data.compressedSize,
       } satisfies CardImageMeta;
-    } catch {
-      alert("Image upload failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Image upload failed";
+      alert(message);
       return null;
     } finally {
       setImageUploading(false);
@@ -2035,7 +2139,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Card Image
-              <span className="ml-1 text-xs font-normal text-gray-400">(auto-compressed to WebP &lt; 100KB)</span>
+              <span className="ml-1 text-xs font-normal text-gray-400">(accepts up to {MAX_CARD_IMAGE_INPUT_LABEL}, compresses to WebP before upload)</span>
             </label>
             
             {/* Subfolder Input */}
@@ -2102,6 +2206,7 @@ function CreateCardForm({ onClose, onSubmit, isSubmitting }: CreateCardFormProps
                   disabled={imageUploading || cardImages.length >= MAX_CARD_IMAGES}
                 />
               </label>
+              <p className="text-xs text-gray-500">Large phone photos are compressed in your browser first, then uploaded.</p>
               <button
                 type="button"
                 onClick={() => setPasteMode(true)}

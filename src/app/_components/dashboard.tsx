@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { Heart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { brand } from "~/config/brand";
@@ -44,7 +45,15 @@ export function Dashboard() {
 
       {/* Content */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <StudyCards />
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-20">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            </div>
+          }
+        >
+          <StudyCards />
+        </Suspense>
       </main>
     </div>
   );
